@@ -1,5 +1,7 @@
 #include <stdint.h>
 typedef uint32_t u32;
+static const int TRUE = 1;
+static const int FALSE = 0;
 
 u32 next_mt_elem(u32 a, u32 i) {
 	return 1812433253 * (a ^ (a >> 30)) + i;
@@ -62,16 +64,17 @@ void daily_seed_make_const(u32 n, u32 *ret_a, u32 *ret_b) {
 	*ret_a = c, *ret_b = d;
 }
 
-u32 daily_seed_step_minus_2_pow_n(u32 seed, u32 n) {
-	static u32 consts[32][2];
-	static int initialized = 0;
-	if (!initialized) {
-		initialized = 1;
-		for (int i = 0; i < 32; i ++) {
-			daily_seed_make_const(-(1u<<i), &consts[i][0], &consts[i][1]);
-		}
+
+static u32 daily_seed_consts[32][2];
+
+void initialize_daily_seed() {
+	for (int i = 0; i < 32; i ++) {
+		daily_seed_make_const(-(1u<<i), &daily_seed_consts[i][0], &daily_seed_consts[i][1]);
 	}
-	return seed * consts[n][0] + consts[n][1];
+}
+
+u32 daily_seed_step_minus_2_pow_n(u32 seed, u32 n) {
+	return seed * daily_seed_consts[n][0] + daily_seed_consts[n][1];
 }
 
 u32 daily_seed_to_index0(u32 seed, int i) {
@@ -94,17 +97,26 @@ typedef struct {
 	u32 daily_seed_index;
 } ENTRY;
 
-#include <stdio.h>
-
-int main(void) {
-	int result = 0;
-	for (u32 i = 0; i < 0x10000; i ++) {
-		u32 trainer_id, daily_seed, daily_seed_index;
-		get_mt_result(i, &trainer_id, &daily_seed);
-		daily_seed_index = daily_seed_to_index(daily_seed);
-		result += daily_seed_index; // 最適化防止
-	}
-	printf("%.x\n", result);
-	printf("ok\n");
-	return 0;
+int public_id(const ENTRY *entry) {
+	return entry->trainer_id & 0xffff;
 }
+
+const int NUM_ALL_SEEDS = 256*24*65536;
+
+// NUM_ALL_SEEDS未満の整数iから、初期seed全体のi番目を取得
+u32 to_seed(int i) {
+	u32 a = i / 24*65536;
+	u32 b = (i / 65536) % 24;
+	u32 c = i % 65536;
+	return (a << 24) | (b << 16) | c;
+}
+
+void seed_to_entry(u32 seed, ENTRY *entry) {
+	u32 trainer_id, daily_seed, daily_seed_index;
+	get_mt_result(seed, &trainer_id, &daily_seed);
+	daily_seed_index = daily_seed_to_index(daily_seed);
+	entry->seed = seed;
+	entry->trainer_id = trainer_id;
+	entry->daily_seed_index = daily_seed_index;
+}
+
