@@ -117,10 +117,7 @@ static void copy_run_to(READER *reader, FILE *fp) {
 	} while (!end_of_run(reader));
 }
 
-static void divide(void) {
-	FILE *rf = fopen(PATH_ALLENTRIES_SORTED, "rb");
-	FILE *wf1 = fopen(PATH_SORT_TMP_1, "wb");
-	FILE *wf2 = fopen(PATH_SORT_TMP_2, "wb");
+static void divide(FILE *wf1, FILE *wf2, FILE *rf) {
 	READER reader;
 	init_reader(&reader, rf);
 	for (;;) {
@@ -129,16 +126,10 @@ static void divide(void) {
 		if (!reader.available) break;
 		copy_run_to(&reader, wf2);
 	}
-	fclose(rf);
-	fclose(wf1);
-	fclose(wf2);
 }
 
-static int merge(void) {
+static int merge(FILE *rf1, FILE *rf2, FILE *wf) {
 	int run_count = 0;
-	FILE *rf1 = fopen(PATH_SORT_TMP_1, "rb");
-	FILE *rf2 = fopen(PATH_SORT_TMP_2, "rb");
-	FILE *wf = fopen(PATH_ALLENTRIES_SORTED, "wb");
 	READER reader1, reader2;
 	init_reader(&reader1, rf1);
 	init_reader(&reader2, rf2);
@@ -166,19 +157,33 @@ static int merge(void) {
 		copy_run_to(&reader2, wf);
 		run_count ++;
 	}
-	fclose(rf1);
-	fclose(rf2);
-	fclose(wf);
 	printf("run_count = %d\n", run_count);
 	return run_count;
 }
 
 static void merge_sort(void) {
+	const int size = BLOCK_SIZE * sizeof(ENTRY);
+	char *buf = malloc(size * 3);
 	int run_count;
+	// divideとmergeを繰り返す。ただし、高速化のためIOに大きなバッファを設定する
 	do {
-		divide();
-		run_count = merge();
+		for (int i = 0; i < 2; i ++) {
+			FILE *tmp1, *tmp2, *sorted;
+			tmp1 = fopen(PATH_SORT_TMP_1, i ? "rb" : "wb");
+			tmp2 = fopen(PATH_SORT_TMP_2, i ? "rb" : "wb");
+			sorted = fopen(PATH_ALLENTRIES_SORTED, i ? "wb" : "rb");
+			setvbuf(tmp1, buf, _IOFBF, size);
+			setvbuf(tmp2, buf + size, _IOFBF, size);
+			setvbuf(sorted, buf + size * 2, _IOFBF, size);
+			if (i == 0) {
+				divide(tmp1, tmp2, sorted);
+			} else {
+				run_count = merge(tmp1, tmp2, sorted);
+			}
+			fclose(tmp1); fclose(tmp2); fclose(sorted);
+		}
 	} while (run_count != 1);
+	free(buf);
 	remove(PATH_SORT_TMP_1);
 	remove(PATH_SORT_TMP_2);
 }
