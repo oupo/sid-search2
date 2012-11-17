@@ -4,15 +4,15 @@
 #include <time.h>
 #include <sys/stat.h>
 #include <omp.h>
+#include <glib.h>
 #include "common.c"
-#define min(a,b) ((a) < (b) ? (a) : (b))
 
-#ifndef BLOCK_SIZE_PER
-#define BLOCK_SIZE_PER 1
+#ifndef BLOCK_SIZE_ADJ
+#define BLOCK_SIZE_ADJ 1
 #endif
 
 const int NUM_ALL = 10*1024*1024;
-const int BLOCK_SIZE = 1024*1024*BLOCK_SIZE_PER;
+const int BLOCK_SIZE = 1024*1024*BLOCK_SIZE_ADJ;
 const int PREPARE_SORT_SIZE = 1024*1024;
 const char PATH_ALLENTRIES[] = "all-entries";
 const char PATH_ALLENTRIES_SORTED[] = "all-entries-sorted";
@@ -39,8 +39,9 @@ void make_allentries() {
 #endif
 	ENTRY *result = malloc(BLOCK_SIZE * sizeof(ENTRY));
 	while (pos < NUM_ALL) {
-		printf("%d\n", pos);
-		int n = min(BLOCK_SIZE, NUM_ALL - pos);
+		printf("%.2f\r", (double)pos / NUM_ALL);
+		fflush(stdout);
+		int n = MIN(BLOCK_SIZE, NUM_ALL - pos);
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static)
 #endif
@@ -77,7 +78,7 @@ static void prepare_sort(void) {
 	FILE *rf = fopen(PATH_ALLENTRIES, "rb");
 	FILE *wf = fopen(PATH_ALLENTRIES_SORTED, "wb");
 	ENTRY *buf = malloc(PREPARE_SORT_SIZE * sizeof(ENTRY));
-	while (1) {
+	while (TRUE) {
 		size_t n = fread(buf, sizeof(ENTRY), PREPARE_SORT_SIZE, rf);
 		qsort(buf, n, sizeof(ENTRY), qsort_callback_entry);
 		fwrite(buf, sizeof(ENTRY), n, wf);
@@ -218,10 +219,13 @@ static void separate_by_public_id(void) {
 }
 
 #define LOG(expr) do { \
-	clock_t start = clock(); \
+	GTimer *timer = g_timer_new(); \
 	printf("(%s): start %s\n", now_time_str(), #expr); \
+	g_timer_start(timer); \
 	expr; \
-	printf("(%s): finish %s (%.2f sec)\n", now_time_str(), #expr, (double)(clock() - start) / CLOCKS_PER_SEC); \
+	g_timer_stop(timer); \
+	printf("(%s): finish %s (%.2f sec)\n", now_time_str(), #expr, g_timer_elapsed(timer, NULL)); \
+	g_timer_destroy(timer); \
 } while (0)
 
 int main(void) {

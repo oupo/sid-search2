@@ -1,7 +1,5 @@
 #include <stdint.h>
 typedef uint32_t u32;
-static const int TRUE = 1;
-static const int FALSE = 0;
 
 u32 next_mt_elem(u32 a, u32 i) {
 	return 1812433253 * (a ^ (a >> 30)) + i;

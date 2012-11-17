@@ -1,0 +1,14 @@
+#!/usr/bin/ruby
+
+file = ARGV[0]
+args = ARGV[1..-1].join(" ")
+
+outfile = file.sub(".c", "")
+
+glib_opt = `pkg-config --cflags --libs glib-2.0`.chomp
+outfile_opt = ARGV.index("-o") ? "" : "-o #{outfile}"
+command = "gcc #{file} #{outfile_opt} #{args} -g -std=c99 -Wall -W -O2 -fopenmp #{glib_opt}"
+puts command
+exec command
+
+
