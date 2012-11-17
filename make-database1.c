@@ -20,16 +20,6 @@ const char PATH_SORT_TMP_1[] = "tmp1";
 const char PATH_SORT_TMP_2[] = "tmp2";
 const char PATH_DIR_DATABASE[] = "database";
 
-char *now_time_str() {
-	time_t t;
-	struct tm *tm;
-	static char str[256];
-	t = time(NULL);
-	tm = localtime(&t);
-	strftime(str, sizeof(str), "%F %T", tm);
-	return str;
-}
-
 void make_allentries() {
 	int pos = 0;
 	FILE *fp = fopen(PATH_ALLENTRIES, "wb");
@@ -82,7 +72,7 @@ static void prepare_sort(void) {
 		size_t n = fread(buf, sizeof(ENTRY), PREPARE_SORT_SIZE, rf);
 		qsort(buf, n, sizeof(ENTRY), qsort_callback_entry);
 		fwrite(buf, sizeof(ENTRY), n, wf);
-		if (n < PREPARE_SORT_SIZE) break;
+		if (n < (size_t)PREPARE_SORT_SIZE) break;
 	}
 	fclose(rf);
 	fclose(wf);
@@ -220,15 +210,16 @@ static void separate_by_public_id(void) {
 
 #define LOG(expr) do { \
 	GTimer *timer = g_timer_new(); \
-	printf("(%s): start %s\n", now_time_str(), #expr); \
+	printf("start %s\n", #expr); \
 	g_timer_start(timer); \
 	expr; \
 	g_timer_stop(timer); \
-	printf("(%s): finish %s (%.2f sec)\n", now_time_str(), #expr, g_timer_elapsed(timer, NULL)); \
+	printf("finish %s (%.2f sec)\n", #expr, g_timer_elapsed(timer, NULL)); \
 	g_timer_destroy(timer); \
 } while (0)
 
 int main(void) {
+	setvbuf(stdout, NULL, _IOLBF, 0); // 出力がteeされたときでもすぐにフラッシュされるように
 	printf("BLOCK_SIZE = %d\n", BLOCK_SIZE);
 	LOG(make_allentries());
 	LOG(prepare_sort());
