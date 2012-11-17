@@ -93,7 +93,7 @@ const int NUM_ALL_SEEDS = 256*24*65536;
 
 // NUM_ALL_SEEDS未満の整数iから、初期seed全体のi番目を取得
 u32 to_seed(int i) {
-	u32 a = i / 24*65536;
+	u32 a = i / (24*65536);
 	u32 b = (i / 65536) % 24;
 	u32 c = i % 65536;
 	return (a << 24) | (b << 16) | c;
