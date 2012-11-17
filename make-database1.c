@@ -188,9 +188,12 @@ static void merge_sort(void) {
 
 static void separate_by_public_id(void) {
 	mkdir(PATH_DIR_DATABASE, 0777);
+	const int size = BLOCK_SIZE * sizeof(ENTRY);
+	char *buf = malloc(size * 2);
 	FILE *rf = fopen(PATH_ALLENTRIES_SORTED, "rb");
-	int current_public_id = -1;
 	FILE *wf = NULL;
+	setvbuf(rf, buf, _IOFBF, size);
+	int current_public_id = -1;
 	while (TRUE) {
 		ENTRY entry;
 		size_t n = fread(&entry, sizeof(ENTRY), 1, rf);
@@ -200,7 +203,12 @@ static void separate_by_public_id(void) {
 			char path[256];
 			sprintf(path, "%s/%.4x", PATH_DIR_DATABASE, public_id(&entry));
 			wf = fopen(path, "wb");
+			setvbuf(wf, buf + size, _IOFBF, size);
 			current_public_id = public_id(&entry);
+			if ((current_public_id % 1000) == 0) {
+				printf("%d\r", current_public_id);
+				fflush(stdout);
+			}
 		}
 		fwrite(&entry, sizeof(ENTRY), 1, wf);
 	}
@@ -208,21 +216,28 @@ static void separate_by_public_id(void) {
 	fclose(rf);
 }
 
+void remove_database_dir() {
+	char str[256];
+	sprintf(str, "rm -r %s", PATH_DIR_DATABASE);
+	printf("removing database dir\n");
+	system(str);
+}
+
 #define LOG(expr) do { \
-	GTimer *timer = g_timer_new(); \
 	printf("start %s\n", #expr); \
-	g_timer_start(timer); \
+	gint64 start = g_get_real_time(); \
 	expr; \
-	g_timer_stop(timer); \
-	printf("finish %s (%.2f sec)\n", #expr, g_timer_elapsed(timer, NULL)); \
-	g_timer_destroy(timer); \
+	printf("finish %s (%.2f sec)\n", #expr, (g_get_real_time() - start) / 1e6); \
 } while (0)
 
 int main(void) {
 	setvbuf(stdout, NULL, _IOLBF, 0); // 出力がteeされたときでもすぐにフラッシュされるように
 	printf("BLOCK_SIZE = %d\n", BLOCK_SIZE);
+	remove_database_dir();
+	gint64 start = g_get_real_time();
 	LOG(make_allentries());
 	LOG(prepare_sort());
 	LOG(merge_sort());
-	//LOG(separate_by_public_id());
+	LOG(separate_by_public_id());
+	printf("total: %.2f sec\n", (g_get_real_time() - start) / 1e6);
 }
