@@ -11,9 +11,11 @@
 #define BLOCK_SIZE_ADJ 1
 #endif
 
-const int NUM_ALL = 10*1024*1024;
+#define NUM_ALL_SEEDS (256*24*65536) // initializer element is not constant対策のためマクロ
+
+const int NUM_ALL = NUM_ALL_SEEDS;
 const int BLOCK_SIZE = 1024*1024*BLOCK_SIZE_ADJ;
-const int PREPARE_SORT_SIZE = 1024*1024;
+const int PREPARE_SORT_SIZE = NUM_ALL_SEEDS/32; // NUM_ALLとの比が2のべきだとマージソートの回数に無駄がなくなる
 const char PATH_ALLENTRIES[] = "all-entries";
 const char PATH_ALLENTRIES_SORTED[] = "all-entries-sorted";
 const char PATH_SORT_TMP_1[] = "tmp1";
