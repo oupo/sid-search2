@@ -1,3 +1,4 @@
+// all-entries-sortedまではdaily_seed_indexをもたずに作る。separate_by_public_idの時点で付け加える。
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,30 +24,40 @@ const char PATH_DIR_DATABASE[] = "database";
 typedef struct {
 	u32 seed;
 	u32 trainer_id;
+} BRIEF_ENTRY;
+
+typedef struct {
+	u32 seed;
+	u32 trainer_id;
 	u32 daily_seed_index;
 } ENTRY;
+
+int brief_entry_public_id(const BRIEF_ENTRY *entry) {
+	return entry->trainer_id & 0xffff;
+}
 
 int public_id(const ENTRY *entry) {
 	return entry->trainer_id & 0xffff;
 }
 
-void seed_to_entry(u32 seed, ENTRY *entry) {
-	u32 trainer_id, daily_seed, daily_seed_index;
-	get_mt_result(seed, &daily_seed, &trainer_id);
-	daily_seed_index = daily_seed_to_index(daily_seed);
+void seed_to_brief_entry(u32 seed, BRIEF_ENTRY *entry) {
 	entry->seed = seed;
-	entry->trainer_id = trainer_id;
-	entry->daily_seed_index = daily_seed_index;
+	entry->trainer_id = get_second_mt_result(seed);
+}
+
+void brief_entry_to_entry(const BRIEF_ENTRY *bentry, ENTRY *entry) {
+	entry->seed = bentry->seed;
+	entry->trainer_id = bentry->trainer_id;
+	entry->daily_seed_index = daily_seed_to_index(get_first_mt_result(entry->seed));
 }
 
 void make_allentries() {
 	int pos = 0;
 	FILE *fp = fopen(PATH_ALLENTRIES, "wb");
-	initialize_daily_seed();
 #ifdef _OPENMP
 	printf("OpenMP enabled\n");
 #endif
-	ENTRY *result = malloc(BLOCK_SIZE * sizeof(ENTRY));
+	BRIEF_ENTRY *result = malloc(BLOCK_SIZE * sizeof(BRIEF_ENTRY));
 	while (pos < NUM_ALL) {
 		printf("%.2f\r", (double)pos / NUM_ALL);
 		fflush(stdout);
@@ -56,11 +67,11 @@ void make_allentries() {
 #endif
 		for (int i = 0; i < n; i ++) {
 			u32 seed = to_seed(pos + i);
-			ENTRY entry;
-			seed_to_entry(seed, &entry);
+			BRIEF_ENTRY entry;
+			seed_to_brief_entry(seed, &entry);
 			result[i] = entry;
 		}
-		fwrite(result, sizeof(ENTRY), n, fp);
+		fwrite(result, sizeof(BRIEF_ENTRY), n, fp);
 		pos += n;
 	}
 	fclose(fp);
@@ -83,14 +94,22 @@ int qsort_callback_entry(const void *a, const void *b) {
 	return compare_entry((const ENTRY *)a, (const ENTRY*)b);
 }
 
+int compare_brief_entry(const BRIEF_ENTRY *a, const BRIEF_ENTRY *b) {
+	return compare_u32(brief_entry_public_id(a), brief_entry_public_id(b));
+}
+
+int qsort_callback_brief_entry(const void *a, const void *b) {
+	return compare_brief_entry((const BRIEF_ENTRY *)a, (const BRIEF_ENTRY*)b);
+}
+
 static void prepare_sort(void) {
 	FILE *rf = fopen(PATH_ALLENTRIES, "rb");
 	FILE *wf = fopen(PATH_ALLENTRIES_SORTED, "wb");
-	ENTRY *buf = malloc(PREPARE_SORT_SIZE * sizeof(ENTRY));
+	BRIEF_ENTRY *buf = malloc(PREPARE_SORT_SIZE * sizeof(BRIEF_ENTRY));
 	while (TRUE) {
-		size_t n = fread(buf, sizeof(ENTRY), PREPARE_SORT_SIZE, rf);
-		qsort(buf, n, sizeof(ENTRY), qsort_callback_entry);
-		fwrite(buf, sizeof(ENTRY), n, wf);
+		size_t n = fread(buf, sizeof(BRIEF_ENTRY), PREPARE_SORT_SIZE, rf);
+		qsort(buf, n, sizeof(BRIEF_ENTRY), qsort_callback_brief_entry);
+		fwrite(buf, sizeof(BRIEF_ENTRY), n, wf);
 		if (n < (size_t)PREPARE_SORT_SIZE) break;
 	}
 	fclose(rf);
@@ -100,31 +119,31 @@ static void prepare_sort(void) {
 
 typedef struct {
 	FILE *fp;
-	ENTRY last, current;
+	BRIEF_ENTRY last, current;
 	int available;
 } READER;
 
 static void read_next(READER *reader) {
 	size_t n;
 	reader->last = reader->current;
-	n = fread(&reader->current, sizeof(ENTRY), 1, reader->fp);
+	n = fread(&reader->current, sizeof(BRIEF_ENTRY), 1, reader->fp);
 	reader->available = (n == 1);
 }
 
 static void init_reader(READER *reader, FILE *fp) {
 	reader->fp = fp;
-	memset(&reader->last, 0xff, sizeof(ENTRY));
-	memset(&reader->current, 0xff, sizeof(ENTRY));
+	memset(&reader->last, 0xff, sizeof(BRIEF_ENTRY));
+	memset(&reader->current, 0xff, sizeof(BRIEF_ENTRY));
 	reader->available = FALSE;
 	read_next(reader);
 }
 
 static int end_of_run(READER *reader) {
-	return !reader->available || compare_entry(&reader->current, &reader->last) < 0;
+	return !reader->available || compare_brief_entry(&reader->current, &reader->last) < 0;
 }
 
 static void copy_to(READER *reader, FILE *fp) {
-	fwrite(&reader->current, sizeof(ENTRY), 1, fp);
+	fwrite(&reader->current, sizeof(BRIEF_ENTRY), 1, fp);
 	read_next(reader);
 }
 
@@ -153,7 +172,7 @@ static int merge(FILE *rf1, FILE *rf2, FILE *wf) {
 	while (reader1.available && reader2.available) {
 		for (;;) {
 			READER *a, *b;
-			if (compare_entry(&reader1.current, &reader2.current) < 0) {
+			if (compare_brief_entry(&reader1.current, &reader2.current) < 0) {
 				a = &reader1, b = &reader2;
 			} else {
 				a = &reader2, b = &reader1;
@@ -179,7 +198,7 @@ static int merge(FILE *rf1, FILE *rf2, FILE *wf) {
 }
 
 static void merge_sort(void) {
-	const int size = BLOCK_SIZE * sizeof(ENTRY);
+	const int size = BLOCK_SIZE * sizeof(BRIEF_ENTRY);
 	char *buf = malloc(size * 3);
 	int run_count;
 	// divideとmergeを繰り返す。ただし、高速化のためIOに大きなバッファを設定する
@@ -206,40 +225,62 @@ static void merge_sort(void) {
 }
 
 static void separate_by_public_id(void) {
+	initialize_daily_seed();
 	mkdir(PATH_DIR_DATABASE, 0777);
+	GArray *array = g_array_sized_new(FALSE, FALSE, sizeof(ENTRY), 256*32);
 	const int size = BLOCK_SIZE * sizeof(ENTRY);
-	char *buf = malloc(size * 2);
+	char *buf = malloc(size);
 	FILE *rf = fopen(PATH_ALLENTRIES_SORTED, "rb");
-	FILE *wf = NULL;
 	setvbuf(rf, buf, _IOFBF, size);
 	int current_public_id = -1;
 	while (TRUE) {
-		ENTRY entry;
-		size_t n = fread(&entry, sizeof(ENTRY), 1, rf);
-		if (n == 0) break;
-		if (public_id(&entry) != current_public_id) {
-			if (wf) fclose(wf);
+		BRIEF_ENTRY bentry;
+		size_t n = fread(&bentry, sizeof(BRIEF_ENTRY), 1, rf);
+
+		if (current_public_id == -1) {
+			current_public_id = brief_entry_public_id(&bentry);
+		} else if (n == 0 || brief_entry_public_id(&bentry) != current_public_id) {
+			printf("array: ------------------\n");
+			for (int i = 0; i < array->len; i ++) {
+				ENTRY entry = ((ENTRY*)array->data)[i];
+				printf("%3d: %.8x %.8x %.8x\n", i, entry.seed, entry.trainer_id, entry.daily_seed_index);
+			}
+			//g_array_sort(array, qsort_callback_entry);
+			qsort(array->data, array->len, sizeof(ENTRY), qsort_callback_entry);
 			char path[256];
-			sprintf(path, "%s/%.4x", PATH_DIR_DATABASE, public_id(&entry));
-			wf = fopen(path, "wb");
-			setvbuf(wf, buf + size, _IOFBF, size);
-			current_public_id = public_id(&entry);
+			sprintf(path, "%s/%.4x", PATH_DIR_DATABASE, current_public_id);
+			FILE *wf = fopen(path, "wb");
+			printf("sorted: ------------------\n");
+			for (int i = 0; i < array->len; i ++) {
+				ENTRY entry = ((ENTRY*)array->data)[i];
+				printf("%3d: %.8x %.8x %.8x\n", i, entry.seed, entry.trainer_id, entry.daily_seed_index);
+			}
+			fwrite(array->data, sizeof(ENTRY), g_array_get_element_size(array), wf);
+			fclose(wf);
+			g_array_set_size(array, 0);
+			current_public_id = brief_entry_public_id(&bentry);
 			if ((current_public_id % 1000) == 0) {
 				printf("%d\r", current_public_id);
 				fflush(stdout);
 			}
+			break;
 		}
-		fwrite(&entry, sizeof(ENTRY), 1, wf);
+		if (n == 0) break;
+		ENTRY entry;
+		brief_entry_to_entry(&bentry, &entry);
+		printf("%3d: %.8x %.8x %.8x\n", array->len, entry.seed, entry.trainer_id, entry.daily_seed_index);
+		g_array_append_val(array, entry);
 	}
-	if (wf) fclose(wf);
 	fclose(rf);
+	g_array_unref(array);
 }
 
 void remove_database_dir() {
 	char str[256];
 	sprintf(str, "rm -r %s", PATH_DIR_DATABASE);
 	printf("removing database dir\n");
-	system(str);
+	int r = system(str);
+	g_assert(r >= 0); // warn_unused_result対策
 }
 
 #define LOG(expr) do { \
@@ -254,9 +295,9 @@ int main(void) {
 	printf("BLOCK_SIZE = %d\n", BLOCK_SIZE);
 	remove_database_dir();
 	gint64 start = g_get_real_time();
-	LOG(make_allentries());
-	LOG(prepare_sort());
-	LOG(merge_sort());
+	//LOG(make_allentries());
+	//LOG(prepare_sort());
+	//LOG(merge_sort());
 	LOG(separate_by_public_id());
 	printf("total: %.2f sec\n", (g_get_real_time() - start) / 1e6);
 }
