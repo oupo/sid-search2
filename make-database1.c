@@ -18,7 +18,7 @@ const char PATH_ALLENTRIES[] = "all-entries";
 const char PATH_ALLENTRIES_SORTED[] = "all-entries-sorted";
 const char PATH_SORT_TMP_1[] = "tmp1";
 const char PATH_SORT_TMP_2[] = "tmp2";
-const char PATH_DIR_DATABASE[] = "database";
+const char PATH_DIR_DATABASE[] = "database-1";
 
 typedef struct {
 	u32 seed;
@@ -239,7 +239,8 @@ void remove_database_dir() {
 	char str[256];
 	sprintf(str, "rm -r %s", PATH_DIR_DATABASE);
 	printf("removing database dir\n");
-	system(str);
+	int r = system(str);
+	g_assert(r >= 0); // warn_unused_result対策
 }
 
 #define LOG(expr) do { \

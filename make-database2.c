@@ -19,7 +19,7 @@ const char PATH_ALLENTRIES[] = "all-entries";
 const char PATH_ALLENTRIES_SORTED[] = "all-entries-sorted";
 const char PATH_SORT_TMP_1[] = "tmp1";
 const char PATH_SORT_TMP_2[] = "tmp2";
-const char PATH_DIR_DATABASE[] = "database";
+const char PATH_DIR_DATABASE[] = "database-2";
 
 typedef struct {
 	u32 seed;
@@ -240,22 +240,11 @@ static void separate_by_public_id(void) {
 		if (current_public_id == -1) {
 			current_public_id = brief_entry_public_id(&bentry);
 		} else if (n == 0 || brief_entry_public_id(&bentry) != current_public_id) {
-			printf("array: ------------------\n");
-			for (int i = 0; i < array->len; i ++) {
-				ENTRY entry = ((ENTRY*)array->data)[i];
-				printf("%3d: %.8x %.8x %.8x\n", i, entry.seed, entry.trainer_id, entry.daily_seed_index);
-			}
-			//g_array_sort(array, qsort_callback_entry);
-			qsort(array->data, array->len, sizeof(ENTRY), qsort_callback_entry);
+			g_array_sort(array, qsort_callback_entry);
 			char path[256];
 			sprintf(path, "%s/%.4x", PATH_DIR_DATABASE, current_public_id);
 			FILE *wf = fopen(path, "wb");
-			printf("sorted: ------------------\n");
-			for (int i = 0; i < array->len; i ++) {
-				ENTRY entry = ((ENTRY*)array->data)[i];
-				printf("%3d: %.8x %.8x %.8x\n", i, entry.seed, entry.trainer_id, entry.daily_seed_index);
-			}
-			fwrite(array->data, sizeof(ENTRY), g_array_get_element_size(array), wf);
+			fwrite(array->data, sizeof(ENTRY), array->len, wf);
 			fclose(wf);
 			g_array_set_size(array, 0);
 			current_public_id = brief_entry_public_id(&bentry);
@@ -263,12 +252,10 @@ static void separate_by_public_id(void) {
 				printf("%d\r", current_public_id);
 				fflush(stdout);
 			}
-			break;
 		}
 		if (n == 0) break;
 		ENTRY entry;
 		brief_entry_to_entry(&bentry, &entry);
-		printf("%3d: %.8x %.8x %.8x\n", array->len, entry.seed, entry.trainer_id, entry.daily_seed_index);
 		g_array_append_val(array, entry);
 	}
 	fclose(rf);
@@ -295,9 +282,9 @@ int main(void) {
 	printf("BLOCK_SIZE = %d\n", BLOCK_SIZE);
 	remove_database_dir();
 	gint64 start = g_get_real_time();
-	//LOG(make_allentries());
-	//LOG(prepare_sort());
-	//LOG(merge_sort());
+	LOG(make_allentries());
+	LOG(prepare_sort());
+	LOG(merge_sort());
 	LOG(separate_by_public_id());
 	printf("total: %.2f sec\n", (g_get_real_time() - start) / 1e6);
 }
