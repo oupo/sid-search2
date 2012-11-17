@@ -7,20 +7,16 @@
 #include <glib.h>
 #include "common.c"
 
-#ifndef BLOCK_SIZE_ADJ
-#define BLOCK_SIZE_ADJ 1
-#endif
-
 #define NUM_ALL_SEEDS (256*24*65536) // initializer element is not constant対策のためマクロ
 
 const int NUM_ALL = NUM_ALL_SEEDS;
-const int BLOCK_SIZE = 1024*1024*BLOCK_SIZE_ADJ;
+const int BLOCK_SIZE = 1024*1024;
 const int PREPARE_SORT_SIZE = NUM_ALL_SEEDS/32; // NUM_ALLとの比が2のべきだとマージソートの回数に無駄がなくなる
 const char PATH_ALLENTRIES[] = "all-entries";
 const char PATH_ALLENTRIES_SORTED[] = "all-entries-sorted";
 const char PATH_SORT_TMP_1[] = "tmp1";
 const char PATH_SORT_TMP_2[] = "tmp2";
-const char PATH_DIR_DATABASE[] = "database-1";
+const char PATH_DIR_DATABASE[] = "database";
 
 typedef struct {
 	u32 seed;
