@@ -7,8 +7,13 @@
 #include "common.c"
 #define min(a,b) ((a) < (b) ? (a) : (b))
 
-const int NUM_ALL = 1024*1024;
-const int BLOCK_SIZE = 1024*1024/4;
+#ifndef BLOCK_SIZE_PER
+#define BLOCK_SIZE_PER 1
+#endif
+
+const int NUM_ALL = 10*1024*1024;
+const int BLOCK_SIZE = 1024*1024*BLOCK_SIZE_PER;
+const int PREPARE_SORT_SIZE = 1024*1024;
 const char PATH_ALLENTRIES[] = "all-entries";
 const char PATH_ALLENTRIES_SORTED[] = "all-entries-sorted";
 const char PATH_SORT_TMP_1[] = "tmp1";
@@ -32,9 +37,9 @@ void make_allentries() {
 #ifdef _OPENMP
 	printf("OpenMP enabled\n");
 #endif
+	ENTRY *result = malloc(BLOCK_SIZE * sizeof(ENTRY));
 	while (pos < NUM_ALL) {
 		printf("%d\n", pos);
-		ENTRY result[BLOCK_SIZE];
 		int n = min(BLOCK_SIZE, NUM_ALL - pos);
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static)
@@ -49,6 +54,7 @@ void make_allentries() {
 		pos += n;
 	}
 	fclose(fp);
+	free(result);
 }
 
 int compare_u32(u32 a, u32 b) {
@@ -70,15 +76,16 @@ int qsort_callback_entry(const void *a, const void *b) {
 static void prepare_sort(void) {
 	FILE *rf = fopen(PATH_ALLENTRIES, "rb");
 	FILE *wf = fopen(PATH_ALLENTRIES_SORTED, "wb");
+	ENTRY *buf = malloc(PREPARE_SORT_SIZE * sizeof(ENTRY));
 	while (1) {
-		ENTRY buf[BLOCK_SIZE];
-		size_t n = fread(buf, sizeof(ENTRY), BLOCK_SIZE, rf);
+		size_t n = fread(buf, sizeof(ENTRY), PREPARE_SORT_SIZE, rf);
 		qsort(buf, n, sizeof(ENTRY), qsort_callback_entry);
 		fwrite(buf, sizeof(ENTRY), n, wf);
-		if (n < BLOCK_SIZE) break;
+		if (n < PREPARE_SORT_SIZE) break;
 	}
 	fclose(rf);
 	fclose(wf);
+	free(buf);
 }
 
 typedef struct {
@@ -211,13 +218,15 @@ static void separate_by_public_id(void) {
 }
 
 #define LOG(expr) do { \
+	clock_t start = clock(); \
 	printf("(%s): start %s\n", now_time_str(), #expr); \
 	expr; \
-	printf("(%s): finish %s\n", now_time_str(), #expr); \
+	printf("(%s): finish %s (%.2f sec)\n", now_time_str(), #expr, (double)(clock() - start) / CLOCKS_PER_SEC); \
 } while (0)
 
 int main(void) {
-	//LOG(make_allentries());
+	printf("BLOCK_SIZE = %d\n", BLOCK_SIZE);
+	LOG(make_allentries());
 	LOG(prepare_sort());
 	LOG(merge_sort());
 	//LOG(separate_by_public_id());
