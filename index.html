@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>sid-seach</title>
+<script src="http://ajax.googleapis.com/ajax/libs/jquery/1/jquery.js"></script>
+<script src="load-binary-file.js"></script>
+<script src="seed.js"></script>
+<script>
+$(function() {
+	$(document.forms.f).submit(submit_callback(on_submit));
+});
+
+function on_submit() {
+	var form = document.forms.f;
+	var tid = read_input(form.elements.tid, "表ID");
+	loadBinaryFile("database/"+to_hex(tid, 4), function (xhr, binary) {
+		var seeds = binaryToU32Array(binary);
+		var entries = seeds.map(Entry.build);
+		var $t = $("<table>");
+		$t.append($("<tr><th>seed<th>id<th>index</tr>"));
+		$t.append(entries.map(function (e) {
+			return $("<tr>").append($("<td>").text(hex(e.seed)))
+			                .append($("<td>").text(hex(e.trainer_id)))
+			                .append($("<td>").text(hex(e.daily_seed_index)));
+		}));
+		$("#result").append($t);
+	});
+}
+
+function Entry(seed, trainer_id, daily_seed_index) {
+	this.seed = seed;
+	this.trainer_id = trainer_id;
+	this.daily_seed_index = daily_seed_index;
+}
+
+Entry.build = function (seed) {
+	var r = get_mt_result(seed);
+	var daily_seed_index = daily_seed_to_index(r[0]);
+	var trainer_id = r[1];
+	return new Entry(seed, trainer_id, daily_seed_index);
+};
+
+function to_hex(x, n) {
+	var s = x.toString(16);
+	while (s.length < n) s = "0" + s;
+	return s;
+}
+
+function hex(x) {
+	return "0x" + to_hex(x, 8);
+}
+
+function binaryToU32Array(binary) {
+	var ret = [];
+	var l = binary.length / 4;
+	for (var i = 0; i < l; i ++) {
+		ret[i] = u32(binary[i*4] | binary[i*4+1] << 8 | binary[i*4+2] << 16 | binary[i*4+3] << 24);
+	}
+	return ret;
+}
+
+function submit_callback(fn) {
+	return function(ev) {
+		try {
+			fn(get_event_target(ev));
+		} catch(e) {
+			if (!(e instanceof InputError)) throw e;
+			alert(e.message);
+		}
+	}
+}
+
+function read_input(input, name, min, max) {
+	var value = read_int_string(input.value);
+	if (min == undefined) min = -Infinity;
+	if (max == undefined) max =  Infinity;
+	if (value !== null && min <= value && value <= max) {
+		return value;
+	} else {
+		input_error(name+"に入力されている値が不正です");
+	}
+}
+
+function read_input_re(input, re, name) {
+	var m = re.exec(input.value);
+	if (!m) input_error(name+"に入力されている値が不正です");
+	return m;
+}
+
+function read_int_string(s, default_value) {
+	if (/^\s*$/.test(s) && default_value !== undefined) {
+		return default_value;
+	}
+	if (!/^\s*(?:-?\d+|0x[0-9a-f]+)\s*$/i.test(s)) {
+		return null;
+	}
+	return Number(s);
+}
+
+function input_error(message) {
+	throw new InputError(message);
+}
+
+function InputError(message) {
+	this.message = message;
+}
+</script>
+</head>
+<body>
+<form action="" name="f" onsubmit="return false;">
+<table>
+<tbody>
+<tr><th>表ID: <td>
+<input type="text" size="10" name="tid" value="">
+<tr><td><td><input type="submit" value="検索">
+</tbody>
+</table>
+</form>
+<div id="result"></div>
+</body>
+</html>
