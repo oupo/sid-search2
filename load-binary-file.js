@@ -1,4 +1,4 @@
-function loadBinaryFile(url, fn) {
+function load_binary_file(url, fn, fn_err) {
 	var xhr = new XMLHttpRequest;
 	xhr.open("GET", url);
 	if (xhr.overrideMimeType) {
@@ -8,15 +8,19 @@ function loadBinaryFile(url, fn) {
 	}
 	xhr.onreadystatechange = function() {
 		if (xhr.readyState === 4) {
+			if (xhr.status !== 200) {
+				fn_err(xhr);
+				return;
+			}
 			var string = (typeof xhr.responseBody === "unknown") ? GetIEByteArray_ByteStr(xhr.responseBody) : xhr.responseText;
-			var array = stringToByteArray(string);
+			var array = string_to_byte_array(string);
 			fn(xhr, array);
 		}
 	};
 	xhr.send(null);
 }
 
-function stringToByteArray(s) {
+function string_to_byte_array(s) {
 	var array = [];
 	for (var i = 0; i < s.length; i ++) {
 		array[i] = s.charCodeAt(i) & 0xff;

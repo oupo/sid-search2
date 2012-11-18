@@ -79,10 +79,19 @@ var daily_seed_step_minus_2_pow_n = (function() {
 	}
 })();
 
-function daily_seed_step(seed, n) {
+function daily_seed_stepper(n) {
 	var c = daily_seed_make_const(n);
-	return u32(mul(seed, c[0]) + c[1]);
+	return function (seed) {
+		return u32(mul(seed, c[0]) + c[1]);
+	};
 }
+
+function daily_seed_step(seed, n) {
+	return daily_seed_stepper(n)(seed);
+}
+
+var daily_seed_next = daily_seed_stepper(1);
+var daily_seed_prev = daily_seed_stepper(-1);
 
 function daily_seed_to_index0(seed, i) {
 	if (i === 32) {
@@ -96,4 +105,30 @@ function daily_seed_to_index0(seed, i) {
 
 function daily_seed_to_index(seed) {
 	return daily_seed_to_index0(seed, 0);
+}
+
+function daily_seed_to_lottery_seed(seed) {
+	return u32(mul(seed, 0x41c64e6d) + 0x3039);
+}
+
+function lottery_seed_to_daily_seed(seed) {
+	return u32(mul(seed, 0xeeb9eb65) + 0xfc77a683);
+}
+
+function lottery_numbers_to_daily_seeds(numbers) {
+	var ret = [];
+	for (var i = 0; i < 65536; i ++) {
+		var lottery_seed = u32(numbers[0] << 16 | i);
+		var fseed = lottery_seed_to_daily_seed(lottery_seed);
+		var seed = fseed;
+		for (var j = 1; j < numbers.length; j ++) {
+			seed = daily_seed_next(seed);
+			var number = daily_seed_to_lottery_seed(seed) >>> 16;
+			if (numbers[j] !== number) break;
+		}
+		if (j === numbers.length) {
+			ret.push(fseed);
+		}
+	}
+	return ret;
 }

@@ -14,18 +14,50 @@ $(function() {
 function on_submit() {
 	var form = document.forms.f;
 	var tid = read_input(form.elements.tid, "表ID");
-	loadBinaryFile("database/"+to_hex(tid, 4), function (xhr, binary) {
-		var seeds = binaryToU32Array(binary);
-		var entries = seeds.map(Entry.build);
+	var daily_index = daily_seed_to_index(read_lottery_input(form.elements.lottery));
+	var range = read_input(form.elements.range, "範囲");
+	load_database(tid, function(seeds) {
+		var entries = match_entries(seeds, daily_index, range);
 		var $t = $("<table>");
-		$t.append($("<tr><th>seed<th>id<th>index</tr>"));
+		$t.append($("<tr><th>pos<th>seed<th>SID</tr>"));
 		$t.append(entries.map(function (e) {
-			return $("<tr>").append($("<td>").text(hex(e.seed)))
-			                .append($("<td>").text(hex(e.trainer_id)))
-			                .append($("<td>").text(hex(e.daily_seed_index)));
+			var diff = daily_index_diff(daily_index, e.daily_seed_index);
+			return $("<tr>").append($("<td>").text(diff + " days ago"))
+					.append($("<td>").text(hex(e.seed)))
+					.append($("<td>").text(e.trainer_id >>> 16));
 		}));
-		$("#result").append($t);
+		$("#result").empty().append($t).append(entries.length + " results.");
+	}, function() {
+		alert("can't load database file");
 	});
+}
+
+function read_lottery_input(input) {
+	var s = input.value.replace(/^\s+|\s+$/g, "");
+	if (/^(?:\d+(?:\s*,)?\s*)+$/.test(s)) {
+		var numbers = s.match(/\d+/g).map(Number);
+		var seeds = lottery_numbers_to_daily_seeds(numbers);
+		if (seeds.length === 0) {
+			input_error("くじ番号に対応するseedが見つかりません");
+		}
+		if (seeds.length > 1) {
+			input_error("くじ番号に対応するseedが一通りに絞れません。もう1日分くじ番号を追加してください");
+		}
+		return seeds[0];
+	} else if (/^0x[0-9a-f]+$/i.test(s)) {
+		var seed = Number(s);
+		return seed;
+	} else {
+		input_error_invalid("くじ");
+	}
+}
+
+function load_database(tid, fn, fn_err) {
+	var url = to_hex(Math.floor(tid/0x1000), 1)+"/"+to_hex(tid, 4);
+	load_binary_file(url, function (xhr, binary) {
+		var seeds = binary_to_u32_array(binary);
+		fn(seeds);
+	}, fn_err);
 }
 
 function Entry(seed, trainer_id, daily_seed_index) {
@@ -41,6 +73,47 @@ Entry.build = function (seed) {
 	return new Entry(seed, trainer_id, daily_seed_index);
 };
 
+function match_entries(seeds, daily_index, range) {
+	function pred(s, x) {
+		return Entry.build(s).daily_seed_index <= daily_index;
+	}
+	var entries = [];
+	var n = seeds.length;
+	var start = mod(bsearch(seeds, pred) - 1, n);
+	var i = start;
+	do {
+		var entry = Entry.build(seeds[i]);
+		var diff = daily_index_diff(daily_index, entry.daily_seed_index);
+		if (diff > range) break;
+		entries.push(entry);
+		i = mod(i - 1, n);
+	} while (i != start);
+	return entries;
+}
+
+function daily_index_diff(a, b) {
+	return mod(a - b, 0x100000000);
+}
+
+function mod(x, m) {
+	return (x % m) + (x < 0 ? m : 0);
+}
+
+// arrayの中で要素がpredを満たさない最小のインデックスを返す
+// ただしfalse < trueとしたときpred(array[n])は単調増加であるとする
+function bsearch(array, pred) {
+	function recur(head, tail) {
+		if (head == tail) return tail;
+		var mid = Math.floor((head + tail) / 2);
+		if (pred(array[mid])) {
+			return recur(mid + 1, tail);
+		} else {
+			return recur(head, mid);
+		}
+	}
+	return recur(0, array.length);
+}
+
 function to_hex(x, n) {
 	var s = x.toString(16);
 	while (s.length < n) s = "0" + s;
@@ -51,7 +124,7 @@ function hex(x) {
 	return "0x" + to_hex(x, 8);
 }
 
-function binaryToU32Array(binary) {
+function binary_to_u32_array(binary) {
 	var ret = [];
 	var l = binary.length / 4;
 	for (var i = 0; i < l; i ++) {
@@ -71,6 +144,10 @@ function submit_callback(fn) {
 	}
 }
 
+function get_event_target(event) {
+	return event.target || event.srcElement;
+}
+
 function read_input(input, name, min, max) {
 	var value = read_int_string(input.value);
 	if (min == undefined) min = -Infinity;
@@ -78,14 +155,8 @@ function read_input(input, name, min, max) {
 	if (value !== null && min <= value && value <= max) {
 		return value;
 	} else {
-		input_error(name+"に入力されている値が不正です");
+		input_error_invalid(name);
 	}
-}
-
-function read_input_re(input, re, name) {
-	var m = re.exec(input.value);
-	if (!m) input_error(name+"に入力されている値が不正です");
-	return m;
 }
 
 function read_int_string(s, default_value) {
@@ -102,17 +173,26 @@ function input_error(message) {
 	throw new InputError(message);
 }
 
+function input_error_invalid(name) {
+	input_error(name+"に入力されている値が不正です");
+}
+
 function InputError(message) {
 	this.message = message;
 }
 </script>
 </head>
 <body>
+<h1>sid-search</h1>
 <form action="" name="f" onsubmit="return false;">
 <table>
 <tbody>
 <tr><th>表ID: <td>
 <input type="text" size="10" name="tid" value="">
+<tr><th>くじ: <td>
+<input type="text" size="30" name="lottery" value="">
+<tr><th>範囲: <td>
+<input type="text" size="10" name="range" value="2000">
 <tr><td><td><input type="submit" value="検索">
 </tbody>
 </table>
