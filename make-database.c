@@ -227,7 +227,7 @@ static void separate_by_public_id(void) {
 				fflush(stdout);
 			}
 		}
-		fwrite(&entry, sizeof(ENTRY), 1, wf);
+		fwrite(&entry.seed, sizeof(u32), 1, wf);
 	}
 	if (wf) fclose(wf);
 	fclose(rf);

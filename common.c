@@ -62,6 +62,11 @@ void daily_seed_make_const(u32 n, u32 *ret_a, u32 *ret_b) {
 	*ret_a = c, *ret_b = d;
 }
 
+u32 daily_seed_step(u32 seed, u32 n) {
+	u32 a, b;
+	daily_seed_make_const(n, &a, &b);
+	return seed * a + b;
+}
 
 static u32 daily_seed_consts[32][2];
 
