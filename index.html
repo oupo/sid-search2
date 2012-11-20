@@ -100,7 +100,7 @@ function mod(x, m) {
 }
 
 // arrayの中で要素がpredを満たさない最小のインデックスを返す
-// ただしfalse < trueとしたときpred(array[n])は単調増加であるとする
+// ただしtrue < falseとしたときpred(array[n])は単調増加であるとする
 function bsearch(array, pred) {
 	function recur(head, tail) {
 		if (head == tail) return tail;
